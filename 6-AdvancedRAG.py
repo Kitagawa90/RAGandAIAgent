@@ -103,3 +103,34 @@ multi_query_rag_chain = {
 
 output = multi_query_rag_chain.invoke("LangChainの概要を教えて")
 print(output)
+
+# ★RAG-Fusion
+from langchain_core.documents import Document
+
+def reciprocal_rank_fusion(
+    retriever_outputs:list[list[Document]],
+    k:int = 60,
+) -> list[str]:
+    # 各ドキュメントのコンテンツ(文字列)とそのスコアの対応を保持する辞書を準備
+    content_score_mapping = {}
+    
+    #検索クエリごとにループ
+    for docs in retriever_outputs:
+        #検索結果のドキュメントごとにループ
+        for rank,doc in enumerate(docs):
+            content = doc.page_content
+            # 初めて登場したコンテンツの場合はスコアを０で初期化
+            if content not in content_score_mapping:
+                content_score_mapping[content] = 0
+            #(1/(順位+k))のスコアを加算
+            content_score_mapping[content] += 1 / (rank + k)
+        # スコアの大きい順にソート
+        ranked = sorted(content_score_mapping.items(), key=lambda x: x[1], reverse=True)
+        return [content for content, _ in ranked]
+
+rag_fusion_chain = {
+    "question": RunnablePassthrough(),
+    "content": query_generation_chain | retriever.map() | reciprocal_rank_fusion,
+} | prompt | model | StrOutputParser()
+
+output = rag_fusion_chain.invoke("LangChainの概要を教えて")
