@@ -134,3 +134,29 @@ rag_fusion_chain = {
 } | prompt | model | StrOutputParser()
 
 output = rag_fusion_chain.invoke("LangChainの概要を教えて")
+
+# ★リランクモデル
+# pip install langchaicohere==0.3.0
+# 環境変数：COHERE_API_KEY
+from typing import Any
+
+from langchain_cohere import CohereRerank
+from langchain_core.documents import Document
+
+def rerank(inp: dict[str, Any], top_n: int = 3) -> list[Document]:
+    question = inp["question"]
+    documents = inp["documents"]
+    
+    cohere_reranker = CohereRerank(model="rerank-multilingual-v3.0", top_n=top_n) #top_nはリランク結果を何件返すかのパラメータ
+    return cohere_reranker.compress_documents(documents=documents, query=question)
+
+rerank_rag_chain = (
+    {
+        "question": RunnablePassthrough(),
+        "documents": retriever,
+    }
+    | RunnablePassthrough.assign(context=rerank) #retrieverの出力をリランクモデルに渡す
+    | prompt | model | StrOutputParser()
+)
+
+rerank_rag_chain.invoke("LangChainの概要を教えて")
